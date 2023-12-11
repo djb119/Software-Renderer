@@ -10,8 +10,15 @@
 
 int wWinMain(HINSTANCE hInstance, HINSTANCE previous, wchar_t* command, int show) {
 	Renderer::Settings render;
-	render.RenderDistance = 4;
-	render.Speed = 20.0f;
+	render.RenderDistance = 16;
+	render.Speed = 10.0f;
+	
+	render.Text.Color = Gdiplus::Color::PaleVioletRed;
+	render.Text.Font = ::CreateFontW(24, 0, 0, 0, FW_DONTCARE, 
+		false, false, false, 
+		DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, 
+		CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, 
+		VARIABLE_PITCH, L"Consolas");
 
 	Terraformer::Settings terrain;
 	terrain.HeightColor = true;

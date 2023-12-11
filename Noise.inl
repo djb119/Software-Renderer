@@ -88,8 +88,8 @@ constexpr Perlin<dimensions, T, Random>::Type Perlin<dimensions, T, Random>::Sam
 	Type values[DBL::Pow2<dimensions>::Value] = {};
 
 	for (std::size_t index = 0; index < 4; index++) {
-		std::clamp(surrounding[index].X, 0.0f, (Type)this->Dimensions()[0]);
-		std::clamp(surrounding[index].Y, 0.0f, (Type)this->Dimensions()[1]);
+		surrounding[index].X = std::clamp(surrounding[index].X, 0.0f, (Type)this->Dimensions()[0]);
+		surrounding[index].Y = std::clamp(surrounding[index].Y, 0.0f, (Type)this->Dimensions()[1]);
 
 		values[index] = data[(std::size_t)(surrounding[index].Y * this->Dimensions()[0] + surrounding[index].X)].Dot(point - surrounding[index]);
 	}
@@ -122,6 +122,7 @@ void Perlin<dimensions, T, Random>::Generate(bool first) {
 
 	const std::size_t count = this->Dimensions().Product();
 	data = (VectorType*)std::malloc(count * sizeof(VectorType));
+	if (!data) return;
 
 	for (std::size_t index = 0; index < count; index++) {
 		for (std::size_t dimension = 0; dimension < dimensions; dimension++)

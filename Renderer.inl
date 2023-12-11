@@ -23,9 +23,11 @@ Renderer::Renderer(std::size_t width, std::size_t height, const Settings& settin
     processes = {
         Update([this]() { return !(frame % this->settings.ChunkUpdate); }, [&]() -> bool {
 
-            static std::size_t size = (2 * this->settings.RenderDistance + 1);
+            const std::size_t size = 2 * this->settings.RenderDistance + 1;
             if(!results) results = (bool*)std::malloc(size * size);
-            std::memset(results, false, size * size);
+            if (!results) return false;
+
+            std::memset(results, 0, size * size);
 
             DBL::Vector2<std::int64_t> coordinates = terrain.ToChunk(camera.Position);
             if (meshes.size()) {
@@ -39,7 +41,7 @@ Renderer::Renderer(std::size_t width, std::size_t height, const Settings& settin
                     }
 
                     chunk -= coordinates;
-                    results[((std::size_t)chunk.Y + this->settings.RenderDistance) * size + ((std::size_t)chunk.X + this->settings.RenderDistance)] = true;
+                    results[(chunk.Y + this->settings.RenderDistance) * size + (chunk.X + this->settings.RenderDistance)] = true;
                 }
             }
 
@@ -94,18 +96,26 @@ constexpr bool Renderer::IsActive() const {
 
 void Renderer::Main() {
     flags.shouldRender = flags.shouldContinue = true;
-    if (processes[0].first()) flags.shouldRender |= processes[0].second();
-    //meshes.resize(1);
 
+    std::wstring string(400, L'\0');
+    POLYTEXTW text[4] = { 0 };
+    for (std::size_t index = 0; index < sizeof(text) / sizeof(POLYTEXTW); index++) {
+        text[index].y = index * 24;
+        text[index].lpstr = string.data() + (index * 100);
+        text[index].uiFlags = text[index].n = 0;
+    }
+    
+
+    std::chrono::milliseconds elapsed(1);
     std::chrono::time_point<std::chrono::high_resolution_clock> start, end;
     for (; flags.shouldContinue; frame++) {
         start = std::chrono::high_resolution_clock::now();
         window.Update();
 
-        //for (Update& update : processes) if (update.first()) flags.shouldRender |= update.second();
-        for (Keybind& keybind : controls) if (::GetKeyState(keybind.first) & 0x8000) flags.shouldRender |= keybind.second();
+        for (Update& update : processes) if (update.first()) updates.world |= update.second();
+        for (Keybind& keybind : controls) if (::GetKeyState(keybind.first) & 0x8000) updates.view |= keybind.second();
 
-
+        flags.shouldRender |= updates.world | updates.view;
         if (flags.shouldRender) {   // I'm a firm believer in minimal indentation, but to avoid a goto mess this is somewhat necessary
             std::memset(buffer.data, 0, window.Dimensions().Product() * sizeof(Gdiplus::Color));
             std::fill(buffer.depth, buffer.depth + window.Dimensions().Product(), std::numeric_limits<float>::max());
@@ -113,15 +123,43 @@ void Renderer::Main() {
             //for (const Mesh3D<>& mesh : meshes) Render(mesh);
             std::for_each(std::execution::par_unseq, std::cbegin(meshes), std::cend(meshes), [this](const Mesh3D<>& mesh) { Render(mesh); });
 
+            std::wstring replacement;
+           
+            if (updates.world) {
+                replacement = std::to_wstring(meshes.size()) + L" meshes loaded";
+                std::wmemcpy(string.data(), replacement.data(), replacement.size());
+                text[0].n = replacement.size();
+            }
+            if (updates.view) {
+                replacement = std::wstring(L"Position: { ") + std::to_wstring(camera.Position.X) 
+                    + L", " + std::to_wstring(camera.Position.Y)
+                    + L", " + std::to_wstring(camera.Position.Z) + L" }";
+
+                std::wmemcpy(string.data() + 100, replacement.data(), replacement.size());
+                text[1].n = replacement.size();
+
+                replacement = std::wstring(L"Rotation: [") + std::to_wstring(camera.RotationXZ) + L", " + std::to_wstring(camera.RotationYZ) + L']';
+                
+                std::wmemcpy(string.data() + 200, replacement.data(), replacement.size());
+                text[2].n = replacement.size();
+            }
+
+            replacement = std::to_wstring(1 + elapsed.count()) + L" mSPF";
+            std::wmemcpy(string.data() + 300, replacement.data(), replacement.size());
+            text[3].n = replacement.size();
+
             ::StretchDIBits(window.Context, 0, 0, window.Dimensions().X, window.Dimensions().Y, 0, 0, window.Dimensions().X, window.Dimensions().Y, buffer.data, &buffer.info, DIB_RGB_COLORS, SRCCOPY);
-            flags.shouldRender = false;
+            ::PolyTextOutW(window.Context, text, sizeof(text) / sizeof(POLYTEXTW));
+            flags.shouldRender = updates.view = updates.world = false;
         }
         else {
             // Extra work, for future
         }
 
+
+
         end = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         
         if (elapsed < settings.mSPF) std::this_thread::sleep_for(settings.mSPF - elapsed);
     }
@@ -248,6 +286,8 @@ void Renderer::Resize() {
     buffer.info.bmiHeader.biWidth = window.Dimensions().X;
     buffer.info.bmiHeader.biHeight = window.Dimensions().Y;
 
+    ::SelectObject(window.Context, settings.Text.Font);
+    ::SetTextColor(window.Context, settings.Text.Color.ToCOLORREF());
 
     current->client = { current->window.Client.right / 2, current->window.Client.bottom / 2 };
     flags.shouldRender = true;
@@ -289,7 +329,7 @@ bool Renderer::Callback(unsigned message, WPARAM wParam, LPARAM lParam) {
         ::ClientToScreen(current->window.Handle, &screen);
 
         ::SetCursorPos(screen.x, screen.y);
-        current->flags.shouldRender = true;
+        current->flags.shouldRender = current->updates.view = true;
         return true;
     }
     case WM_ERASEBKGND: {

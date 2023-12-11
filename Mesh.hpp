@@ -9,7 +9,7 @@ public:
 
 
 	DBL::Vector3<T> Normal() const {
-		DBL::Vector<dimensions, T> first = Points[2] - Points[1], second = Points[3] - Points[1];
+		DBL::Vector<dimensions, T> first = Points[1] - Points[0], second = Points[2] - Points[0];
 		return DBL::Cross(first, second);
 	}
 

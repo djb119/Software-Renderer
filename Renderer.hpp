@@ -34,7 +34,13 @@ public:
 		std::size_t ChunkUpdate = 125;
 
 		std::size_t RenderDistance = 10;
-		std::chrono::milliseconds mSPF = std::chrono::milliseconds(100 / 6);
+		std::chrono::milliseconds mSPF = std::chrono::milliseconds(1000 / 60);
+		
+		struct {
+			HFONT Font = nullptr;
+			Gdiplus::Color Color = {};
+
+		} Text;
 
 	};
 
@@ -57,6 +63,13 @@ private:
 	} flags;
 
 	
+	struct {
+		bool world = false,
+			view = false;
+
+	} updates;
+	
+
 	std::jthread thread;
 	Window window;
 	

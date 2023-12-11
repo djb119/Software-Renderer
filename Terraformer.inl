@@ -63,25 +63,33 @@ void Terraformer::Generate(const DBL::Vector2<std::int64_t>& coordinates, Mesh3D
 			else triangles[0].Color = triangles[1].Color = Configuration.Color;
 			
 			if (Configuration.HeightColor) {
-				triangles[0].Color = heights[0] * 200.0f;
-				triangles[1].Color = heights[3] * 200.0f;
+				triangles[0].Color = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, heights[0] * 20.0f);
+				triangles[1].Color = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, heights[3] * 20.0f);
 			}
 
 			if (Configuration.Shadowing) {
-				float rotations[2] = {
-					triangles[0].Normal().Dot({0.0f, 0.1f, 0.0f}),
-					triangles[1].Normal().Dot({0.0f, 0.1f, 0.0f})
+				constexpr DBL::Vector3<float> vertical(0.0f, 1.0f, 0.0f);
+
+				DBL::Vector3<float> normals[2] = {
+					triangles[0].Normal(),
+					triangles[1].Normal()
+				};
+
+				// TODO: FIX!
+				float adjusts[2] = {
+					std::asin(normals[0].Dot(vertical) / normals[0].Length()) / 6.28,
+					std::asin(normals[1].Dot(vertical) / normals[1].Length()) / 6.28
 				};
 
 				triangles[0].Color.SetFromCOLORREF(RGB(
-					triangles[0].Color.GetR() * rotations[0],
-					triangles[0].Color.GetG() * rotations[0],
-					triangles[0].Color.GetB() * rotations[0]));
+					triangles[0].Color.GetR() * adjusts[0],
+					triangles[0].Color.GetG() * adjusts[0],
+					triangles[0].Color.GetB() * adjusts[0]));
 
 				triangles[1].Color.SetFromCOLORREF(RGB(
-					triangles[1].Color.GetR() * rotations[1],
-					triangles[1].Color.GetG() * rotations[1],
-					triangles[1].Color.GetB() * rotations[1]));
+					triangles[1].Color.GetR() * adjusts[1],
+					triangles[1].Color.GetG() * adjusts[1],
+					triangles[1].Color.GetB() * adjusts[1]));
 			}
 
 			for (std::size_t index = 0; index < 2; index++)
@@ -99,7 +107,7 @@ void Terraformer::Generate(const DBL::Vector2<std::int64_t>& coordinates, Mesh3D
 
 DBL::Vector2<std::int64_t> Terraformer::ToChunk(const DBL::Vector3<float>& position) const {
 	return DBL::Vector2<std::int64_t>{ (std::int64_t)std::floor(position.X / Configuration.Size),
-		(std::int64_t)std::floor(position.Y / Configuration.Size) };
+		(std::int64_t)std::floor(position.Z / Configuration.Size) };
 }
 
 DBL::Vector3<float> Terraformer::ToPosition(const DBL::Vector2<std::int64_t>& chunk) const {
