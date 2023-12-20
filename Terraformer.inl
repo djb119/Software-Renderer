@@ -58,43 +58,15 @@ void Terraformer::Generate(const DBL::Vector2<std::int64_t>& coordinates, Mesh3D
 				chosen->Place(queries[2], chosen->Noise, heights[2]);
 				chosen->Place(queries[3], chosen->Noise, heights[3]);
 
-				triangles[0].Color = triangles[1].Color = chosen->Color;
+				triangles[0].Color.Base = triangles[1].Color.Base = chosen->Color;
 			}
-			else triangles[0].Color = triangles[1].Color = Configuration.Color;
-			
-			if (Configuration.HeightColor) {
-				triangles[0].Color = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, heights[0] * 20.0f);
-				triangles[1].Color = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, heights[3] * 20.0f);
-			}
+			else triangles[0].Color.Base = triangles[1].Color.Base = Configuration.Color;
 
-			if (Configuration.Shadowing) {
-				constexpr DBL::Vector3<float> vertical(0.0f, 1.0f, 0.0f);
-
-				DBL::Vector3<float> normals[2] = {
-					triangles[0].Normal(),
-					triangles[1].Normal()
-				};
-
-				// TODO: FIX!
-				float adjusts[2] = {
-					std::asin(normals[0].Dot(vertical) / normals[0].Length()) / 6.28,
-					std::asin(normals[1].Dot(vertical) / normals[1].Length()) / 6.28
-				};
-
-				triangles[0].Color.SetFromCOLORREF(RGB(
-					triangles[0].Color.GetR() * adjusts[0],
-					triangles[0].Color.GetG() * adjusts[0],
-					triangles[0].Color.GetB() * adjusts[0]));
-
-				triangles[1].Color.SetFromCOLORREF(RGB(
-					triangles[1].Color.GetR() * adjusts[1],
-					triangles[1].Color.GetG() * adjusts[1],
-					triangles[1].Color.GetB() * adjusts[1]));
-			}
 
 			for (std::size_t index = 0; index < 2; index++)
 				for (std::size_t point = 0; point < 3; point++)
 					triangles[index].Points[point] = { points[index + point].X , heights[index + point], points[index + point].Y };
+
 
 			mesh.Faces.push_back(triangles[0]);
 			mesh.Faces.push_back(triangles[1]);

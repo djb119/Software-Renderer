@@ -5,12 +5,12 @@ struct Triangle final {
 public:
 	
 	DBL::Vector<dimensions, T> Points[3] = {};
-	Gdiplus::Color Color;
+	struct { Gdiplus::Color Base, Computed; } Color;
 
 
 	DBL::Vector3<T> Normal() const {
 		DBL::Vector<dimensions, T> first = Points[1] - Points[0], second = Points[2] - Points[0];
-		return DBL::Cross(first, second);
+		return DBL::Cross(first, second).Normalize();
 	}
 
 };
@@ -60,7 +60,7 @@ public:
 	std::vector<Triangle<dimensions, T>> Faces;	// Centered locally around origin
 	T Rotations[dimensions - 1] = {};
 
-	bool Visible = true;
+	bool Visible = true, Computed = false;
 
 	std::size_t Extra = 0;
 
@@ -78,3 +78,12 @@ using Mesh2D = Mesh<2, T>;
 
 template<DBL::Numeric T = float>
 using Mesh3D = Mesh<3, T>;
+
+
+struct Light {
+public:
+
+	DBL::Vector3<float> Position = {};
+	float Strength = 20.0f;
+
+};

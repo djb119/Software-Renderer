@@ -47,7 +47,6 @@ public:
 		float Blend = 3.0f;
 
 		std::int64_t Chunks = 3000, Size = 16;
-		bool HeightColor = false, Shadowing = false;
 
 		Gdiplus::Color Color = Gdiplus::Color::LawnGreen;
 

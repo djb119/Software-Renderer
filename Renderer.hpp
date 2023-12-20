@@ -2,13 +2,17 @@
 
 #include <thread>
 #include <chrono>
+#include <fstream>
 #include <execution>
 #include <windowsx.h>
+#include <commdlg.h>
 
 using DBL::Graphics::Window;
 
 class Renderer final {
 public:
+
+	friend class Terraformer;
 
 	using Update = std::pair<std::function<bool()>, std::function<bool()>>;
 	using Keybind = std::pair<unsigned, std::function<bool()>>;
@@ -36,6 +40,8 @@ public:
 		std::size_t RenderDistance = 10;
 		std::chrono::milliseconds mSPF = std::chrono::milliseconds(1000 / 60);
 		
+		bool ColorByHeight = false, Shading = false, UseLighting = false;
+
 		struct {
 			HFONT Font = nullptr;
 			Gdiplus::Color Color = {};
@@ -60,6 +66,8 @@ private:
 
 		bool cursorLocked = false;
 
+		bool modelMode = false;
+
 	} flags;
 
 	
@@ -77,6 +85,8 @@ private:
 
 	Camera<> camera;
 	std::vector<Mesh3D<>> meshes;
+	std::vector<Light> lights;
+
 	
 	std::size_t frame = 0;
 	std::vector<Update> processes;
@@ -97,9 +107,13 @@ private:
 	void Main();
 
 	void Render(const Mesh3D<>& mesh);
+	void ComputeColor(Mesh3D<>& mesh) const;
 
 	void Resize();
 	
+
+	void LoadModel(const wchar_t* path, Mesh3D<>& mesh, Gdiplus::Color color) const;
+
 
 	static bool Callback(unsigned message, WPARAM wParam, LPARAM lParam);
 

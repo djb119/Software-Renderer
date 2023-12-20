@@ -21,7 +21,7 @@ Renderer::Renderer(std::size_t width, std::size_t height, const Settings& settin
     camera.Position = DBL::Vector3<float>{ 0.0f, 10.0f, 0.0f };
 
     processes = {
-        Update([this]() { return !(frame % this->settings.ChunkUpdate); }, [&]() -> bool {
+        Update([this]() { return !(frame % this->settings.ChunkUpdate) && !flags.modelMode; }, [&]() -> bool {
 
             const std::size_t size = 2 * this->settings.RenderDistance + 1;
             if(!results) results = (bool*)std::malloc(size * size);
@@ -60,6 +60,7 @@ Renderer::Renderer(std::size_t width, std::size_t height, const Settings& settin
                     terrain.Generate(offset, mesh);
                     mesh.Center = terrain.ToPosition(offset);
 
+                    ComputeColor(mesh);
                     meshes.push_back(mesh);
                 }
             }
@@ -69,12 +70,40 @@ Renderer::Renderer(std::size_t width, std::size_t height, const Settings& settin
     };
 
     controls = {
-        Keybind('W', [this]() { camera.Position += camera.Movements[2] * this->settings.Speed; return true; }),
-        Keybind('A', [this]() { camera.Position += camera.Movements[0] * this->settings.Speed; return true; }),
-        Keybind('S', [this]() { camera.Position -= camera.Movements[2] * this->settings.Speed; return true; }),
-        Keybind('D', [this]() { camera.Position -= camera.Movements[0] * this->settings.Speed; return true; }),
-        Keybind(VK_SPACE, [this]() { camera.Position += camera.Movements[1] * this->settings.Speed; return true; }),
-        Keybind(VK_SHIFT, [this]() { camera.Position -= camera.Movements[1] * this->settings.Speed; return true; })
+        Keybind('W', [&]() { camera.Position += camera.Movements[2] * this->settings.Speed; return true; }),
+        Keybind('A', [&]() { camera.Position += camera.Movements[0] * this->settings.Speed; return true; }),
+        Keybind('S', [&]() { camera.Position -= camera.Movements[2] * this->settings.Speed; return true; }),
+        Keybind('D', [&]() { camera.Position -= camera.Movements[0] * this->settings.Speed; return true; }),
+        Keybind('P', [&]() { if (!flags.modelMode) return false; flags.modelMode = false; meshes.clear(); return true; }),
+        Keybind('O', [&]() {
+            wchar_t buffer[512] = { L'\0' };
+
+            OPENFILENAMEW open = {};
+            open.lStructSize = sizeof(OPENFILENAMEW);
+            open.lpstrFilter = L"3D Models\0*.obj\0";
+            open.lpstrTitle = L"Select 3D model...";
+            open.hwndOwner = window.Handle;
+            open.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+            open.lpstrFile = buffer;
+            open.nMaxFile = sizeof(buffer) / sizeof(wchar_t);
+
+            if (!::GetOpenFileNameW(&open)) return false;
+            flags.modelMode = true;
+
+            Mesh3D<> mesh = {};
+            LoadModel(buffer, mesh, Gdiplus::Color::NavajoWhite);
+            ComputeColor(mesh);
+
+            meshes.clear();
+            meshes.push_back(mesh);
+            updates.world = true;
+            return false;
+        }),
+        Keybind(VK_UP, [&]() { this->settings.Speed += 3.0f / this->settings.mSPF.count(); return false; }),
+        Keybind(VK_DOWN, [&]() { this->settings.Speed = std::max(0.0f, this->settings.Speed - 3.0f / this->settings.mSPF.count()); return false; }),
+        Keybind(VK_SPACE, [&]() { camera.Position += camera.Movements[1] * this->settings.Speed; return true; }),
+        Keybind(VK_SHIFT, [&]() { camera.Position -= camera.Movements[1] * this->settings.Speed; return true; }),
+        Keybind(VK_ESCAPE, [&]() { flags.shouldContinue = false; return false; }),
     };
 
     buffer.info.bmiHeader.biSize = sizeof(buffer.info.bmiHeader);
@@ -126,7 +155,7 @@ void Renderer::Main() {
             std::wstring replacement;
            
             if (updates.world) {
-                replacement = std::to_wstring(meshes.size()) + L" meshes loaded";
+                replacement = std::to_wstring(meshes.size()) + L" mesh(es) loaded";
                 std::wmemcpy(string.data(), replacement.data(), replacement.size());
                 text[0].n = replacement.size();
             }
@@ -248,7 +277,7 @@ void Renderer::Render(const Mesh3D<>& mesh) {
             for (; point.X < point.Y; point.X++) {  // Possible condition discrepancy...?
                 if (buffer.depth[++index] <= distance) continue;
 
-                buffer.data[index] = triangle.Color;
+                buffer.data[index] = triangle.Color.Computed;
                 buffer.depth[index] = distance;
             }
         }
@@ -268,7 +297,7 @@ void Renderer::Render(const Mesh3D<>& mesh) {
             for (; point.X < point.Y; point.X++) {  // Possible condition discrepancy...?
                 if (buffer.depth[++index] <= distance) continue;
 
-                buffer.data[index] = triangle.Color;
+                buffer.data[index] = triangle.Color.Computed;
                 buffer.depth[index] = distance;
             }
         }
@@ -291,6 +320,72 @@ void Renderer::Resize() {
 
     current->client = { current->window.Client.right / 2, current->window.Client.bottom / 2 };
     flags.shouldRender = true;
+}
+
+void Renderer::ComputeColor(Mesh3D<>& mesh) const {
+    if (settings.ColorByHeight) {
+        for (auto& triangle : mesh.Faces) {
+            triangle.Color.Base = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, triangle.Points[0].Y);
+            triangle.Color.Base = DBL::Interpolate((float)Gdiplus::Color::PaleVioletRed, (float)Gdiplus::Color::AliceBlue, triangle.Points[2].Y);
+        }
+    }
+
+    if (settings.Shading) {
+        constexpr DBL::Vector3<float> vertical(0.0f, 1.0f, 0.0f);
+        DBL::Vector3<float> normal = {};
+
+        for (auto& triangle : mesh.Faces) {
+            normal = triangle.Normal();
+
+            float adjust = 1.0f - (std::acos(normal.Dot(vertical)) / 3.1415926f);
+            adjust *= 2;
+
+            triangle.Color.Computed = Gdiplus::Color::MakeARGB(
+                triangle.Color.Base.GetA(),
+                triangle.Color.Base.GetR() * adjust,
+                triangle.Color.Base.GetG() * adjust,
+                triangle.Color.Base.GetB() * adjust);
+        }
+    }
+
+    mesh.Computed = true;
+}
+
+void Renderer::LoadModel(const wchar_t* path, Mesh3D<>& mesh, Gdiplus::Color color) const {
+    std::ifstream input(path);
+    if (!input) return;
+
+    std::vector<DBL::Vector3<float>> points;
+    DBL::Vector3<float> data = {};
+    std::string line;
+
+    while (std::getline(input, line)) {
+        if (line[0] == '#') continue;
+
+        if (line[0] == 'v') {
+            char* pointer = line.data() + 2;
+            for (std::size_t index = 0; index < 3; index++)
+                data[index] = std::strtof(pointer, &pointer);
+
+            points.push_back(data);
+        }
+        else if (line[0] == 'f') {
+
+            mesh.Faces.push_back(Triangle<3>());
+            mesh.Faces.back().Color.Base = color;
+
+            std::size_t offset = 2;
+            for (std::size_t index = 0; index < 3; index++) {
+                line = line.substr(offset);
+                offset = line.find(' ') + 1;
+
+                unsigned reference = std::stoi(line);
+                if (reference <= points.size()) mesh.Faces.back().Points[index] = points[reference - 1];
+            }
+        }
+    }
+
+    input.close();
 }
 
 bool Renderer::Callback(unsigned message, WPARAM wParam, LPARAM lParam) {
